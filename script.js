@@ -1478,6 +1478,213 @@
 
 
   /* --------------------------------------------------------------------------
+     3.5 COSMIC STARFIELD & DIGITAL CONSTELLATION SIMULATOR
+     -------------------------------------------------------------------------- */
+
+  class CosmicStarfield {
+    constructor(canvasId = 'spaceCanvas') {
+      this.canvas = document.getElementById(canvasId);
+      if (!this.canvas) return;
+      this.ctx = this.canvas.getContext('2d');
+      this.particles = [];
+      this.animId = null;
+      this.isRunning = true;
+      this.isMotionReduced = false;
+      this.maxDistance = 88;
+
+      this.checkReducedMotion();
+      this.resize();
+      this.initParticles();
+      this.initEvents();
+
+      if (!this.isMotionReduced) {
+        this.start();
+      } else {
+        this.renderOnce();
+      }
+    }
+
+    checkReducedMotion() {
+      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+      this.isMotionReduced = mediaQuery.matches;
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', (e) => {
+          this.isMotionReduced = e.matches;
+          if (this.isMotionReduced) {
+            this.pause();
+            this.renderOnce();
+          } else if (this.isRunning) {
+            this.start();
+          }
+        });
+      }
+    }
+
+    resize() {
+      this.width = window.innerWidth;
+      this.height = window.innerHeight;
+      this.canvas.width = this.width;
+      this.canvas.height = this.height;
+    }
+
+    initParticles() {
+      this.particles = [];
+      let count = 68;
+      if (this.width < 768) {
+        count = 24;
+      } else if (this.width < 1024) {
+        count = 40;
+      }
+
+      const colors = ['#F1F5F9', '#22D3EE', '#C084FC', '#818CF8'];
+
+      for (let i = 0; i < count; i++) {
+        this.particles.push({
+          x: Math.random() * this.width,
+          y: Math.random() * this.height,
+          vx: (Math.random() - 0.5) * 0.25,
+          vy: (Math.random() - 0.5) * 0.25,
+          radius: Math.random() * 1.4 + 0.6,
+          baseAlpha: Math.random() * 0.6 + 0.25,
+          twinkleSpeed: Math.random() * 0.025 + 0.01,
+          phase: Math.random() * Math.PI * 2,
+          color: colors[Math.floor(Math.random() * colors.length)]
+        });
+      }
+    }
+
+    initEvents() {
+      window.addEventListener('resize', () => {
+        this.resize();
+        this.initParticles();
+        if (this.isMotionReduced || !this.isRunning) {
+          this.renderOnce();
+        }
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          this.pause();
+        } else if (this.isRunning && !this.isMotionReduced) {
+          this.start();
+        }
+      });
+    }
+
+    toggle() {
+      this.isRunning = !this.isRunning;
+      if (this.isRunning && !this.isMotionReduced) {
+        this.start();
+      } else {
+        this.pause();
+        this.renderOnce();
+      }
+      return this.isRunning;
+    }
+
+    start() {
+      if (this.animId) cancelAnimationFrame(this.animId);
+      const loop = () => {
+        this.render();
+        this.animId = requestAnimationFrame(loop);
+      };
+      this.animId = requestAnimationFrame(loop);
+    }
+
+    pause() {
+      if (this.animId) {
+        cancelAnimationFrame(this.animId);
+        this.animId = null;
+      }
+    }
+
+    render() {
+      this.ctx.clearRect(0, 0, this.width, this.height);
+      const pLen = this.particles.length;
+
+      // Draw subtle digital constellation connections
+      for (let i = 0; i < pLen; i++) {
+        const p1 = this.particles[i];
+        for (let j = i + 1; j < pLen; j++) {
+          const p2 = this.particles[j];
+          const dx = p1.x - p2.x;
+          const dy = p1.y - p2.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < this.maxDistance) {
+            const alpha = (1 - dist / this.maxDistance) * 0.15;
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = `rgba(34, 211, 238, ${alpha})`;
+            this.ctx.lineWidth = 0.75;
+            this.ctx.moveTo(p1.x, p1.y);
+            this.ctx.lineTo(p2.x, p2.y);
+            this.ctx.stroke();
+          }
+        }
+      }
+
+      // Update and draw stars
+      for (let i = 0; i < pLen; i++) {
+        const p = this.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0) p.x = this.width;
+        else if (p.x > this.width) p.x = 0;
+        if (p.y < 0) p.y = this.height;
+        else if (p.y > this.height) p.y = 0;
+
+        p.phase += p.twinkleSpeed;
+        const alpha = p.baseAlpha + Math.sin(p.phase) * 0.22;
+        const clampedAlpha = Math.max(0.1, Math.min(1, alpha));
+
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        this.ctx.fillStyle = p.color;
+        this.ctx.globalAlpha = clampedAlpha;
+        this.ctx.fill();
+        this.ctx.globalAlpha = 1.0;
+      }
+    }
+
+    renderOnce() {
+      this.ctx.clearRect(0, 0, this.width, this.height);
+      const pLen = this.particles.length;
+
+      for (let i = 0; i < pLen; i++) {
+        const p1 = this.particles[i];
+        for (let j = i + 1; j < pLen; j++) {
+          const p2 = this.particles[j];
+          const dx = p1.x - p2.x;
+          const dy = p1.y - p2.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < this.maxDistance) {
+            const alpha = (1 - dist / this.maxDistance) * 0.12;
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = `rgba(34, 211, 238, ${alpha})`;
+            this.ctx.lineWidth = 0.75;
+            this.ctx.moveTo(p1.x, p1.y);
+            this.ctx.lineTo(p2.x, p2.y);
+            this.ctx.stroke();
+          }
+        }
+      }
+
+      for (let i = 0; i < pLen; i++) {
+        const p = this.particles[i];
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        this.ctx.fillStyle = p.color;
+        this.ctx.globalAlpha = p.baseAlpha;
+        this.ctx.fill();
+        this.ctx.globalAlpha = 1.0;
+      }
+    }
+  }
+
+
+  /* --------------------------------------------------------------------------
      4. APPLICATION CONTROLLER & UI MANAGEMENT
      -------------------------------------------------------------------------- */
 
@@ -1495,11 +1702,17 @@
       this.populateDashboardAndCategories();
       this.populateComparisonTable();
       this.populateBenchmarkCheckboxes();
+      this.updateKPICounters();
       this.updateWorkspaceCipher(this.currentCipherId);
       this.updateFileCipherEngine('caesar');
     }
 
     initDOMElements() {
+      // Top Navigation & Controls
+      this.cosmicToggleBtn = document.getElementById('cosmicToggleBtn');
+      this.cosmicToggleLabel = document.getElementById('cosmicToggleLabel');
+      this.navHelpQuickBtn = document.getElementById('navHelpQuickBtn');
+
       // Sidebar & Navigation
       this.sidebar = document.getElementById('sidebar');
       this.sidebarOpenBtn = document.getElementById('sidebarOpenBtn');
@@ -1508,6 +1721,12 @@
       this.pageSections = document.querySelectorAll('.page-section');
       this.pageTitle = document.getElementById('pageTitle');
       this.pageSubtitle = document.getElementById('pageSubtitle');
+
+      // Dashboard KPI Elements
+      this.kpiTotal = document.getElementById('kpiTotal');
+      this.kpiSub = document.getElementById('kpiSub');
+      this.kpiTrans = document.getElementById('kpiTrans');
+      this.kpiStatus = document.getElementById('kpiStatus');
 
       // Workspace Elements
       this.workspaceSelect = document.getElementById('workspaceCipherSelect');
@@ -1526,12 +1745,15 @@
 
       this.cryptoInput = document.getElementById('cryptoInputText');
       this.cryptoOutput = document.getElementById('cryptoOutputText');
+      this.outputCardPanel = document.getElementById('outputCardPanel');
+      this.outputStatusBadge = document.getElementById('outputStatusBadge');
       this.inputCharCount = document.getElementById('inputCharCount');
       this.outputCharCount = document.getElementById('outputCharCount');
       this.execTimeDisplay = document.getElementById('execTimeDisplay');
 
       this.encryptBtn = document.getElementById('encryptBtn');
       this.decryptBtn = document.getElementById('decryptBtn');
+      this.clearWorkspaceActionBtn = document.getElementById('clearWorkspaceActionBtn');
       this.swapIoBtn = document.getElementById('swapIoBtn');
       this.clearInputBtn = document.getElementById('clearInputBtn');
       this.pasteInputBtn = document.getElementById('pasteInputBtn');
@@ -1578,11 +1800,41 @@
     }
 
     initEventListeners() {
+      // Top Navigation Actions
+      if (this.cosmicToggleBtn) {
+        this.cosmicToggleBtn.addEventListener('click', () => {
+          if (window.cosmicStarfield) {
+            const active = window.cosmicStarfield.toggle();
+            if (this.cosmicToggleLabel) {
+              this.cosmicToggleLabel.textContent = active ? 'Stars: Active' : 'Stars: Paused';
+            }
+            this.showToast(active ? 'Cosmic starfield resumed' : 'Cosmic starfield paused', 'info');
+          }
+        });
+      }
+
+      if (this.navHelpQuickBtn) {
+        this.navHelpQuickBtn.addEventListener('click', () => {
+          this.navigateToSection('help-section');
+        });
+      }
+
       // Sidebar Navigation
       this.navItems.forEach(item => {
         item.addEventListener('click', () => {
           const targetSection = item.getAttribute('data-section');
+          const fileMode = item.getAttribute('data-file-mode');
           this.navigateToSection(targetSection);
+
+          if (targetSection === 'file-tools-section' && fileMode) {
+            if (fileMode === 'encrypt' && this.fileEncryptBtn) {
+              this.fileEncryptBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              this.fileEncryptBtn.focus();
+            } else if (fileMode === 'decrypt' && this.fileDecryptBtn) {
+              this.fileDecryptBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              this.fileDecryptBtn.focus();
+            }
+          }
         });
       });
 
@@ -1618,17 +1870,24 @@
       this.cryptoInput.addEventListener('input', () => {
         this.updateCharCounts();
         this.validateCurrentKey();
+        this.updateKPICounters();
       });
 
       // Encrypt & Decrypt Actions
       this.encryptBtn.addEventListener('click', () => this.handleEncryption());
       this.decryptBtn.addEventListener('click', () => this.handleDecryption());
 
+      // Dedicated CLEAR Workspace Button in Action Row
+      if (this.clearWorkspaceActionBtn) {
+        this.clearWorkspaceActionBtn.addEventListener('click', () => this.confirmClearWorkspace());
+      }
+
       // I/O Tools
       this.swapIoBtn.addEventListener('click', () => this.swapInputOutput());
       this.clearInputBtn.addEventListener('click', () => {
         this.cryptoInput.value = '';
         this.updateCharCounts();
+        this.updateKPICounters();
       });
       this.pasteInputBtn.addEventListener('click', () => this.handlePaste());
       this.copyOutputBtn.addEventListener('click', () => this.copyToClipboard(this.cryptoOutput.value, 'Ciphertext output copied'));
@@ -1717,6 +1976,23 @@
       this.updateWorkspaceCipher(cipherId);
     }
 
+    updateKPICounters() {
+      if (this.kpiTotal) {
+        this.kpiTotal.textContent = Object.keys(CIPHER_REGISTRY).length;
+      }
+      if (this.kpiSub) {
+        this.kpiSub.textContent = Object.values(CIPHER_REGISTRY).filter(c => c.family === 'substitution').length;
+      }
+      if (this.kpiTrans) {
+        this.kpiTrans.textContent = Object.values(CIPHER_REGISTRY).filter(c => c.family === 'transposition').length;
+      }
+      if (this.kpiStatus) {
+        const hasInput = this.cryptoInput && this.cryptoInput.value.trim().length > 0;
+        const hasOutput = this.cryptoOutput && this.cryptoOutput.value.trim().length > 0;
+        this.kpiStatus.textContent = (hasInput || hasOutput) ? 'Active' : 'Ready';
+      }
+    }
+
 
     /* ------------------------------------------------------------------------
        DASHBOARD & CIPHER CARD GENERATION
@@ -1732,12 +2008,30 @@
       subGrid.innerHTML = '';
       transGrid.innerHTML = '';
 
+      // Dedicated geometric SVG icons for each classical algorithm
+      const CIPHER_ICONS = {
+        caesar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m14 8 2.5-2.5M7.5 16.5 10 14"/></svg>`,
+        monoalphabetic: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 7 3-4 3 4M6 3v12"/><path d="m21 17-3 4-3-4M18 7v14"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/></svg>`,
+        playfair: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7.5" y1="3" x2="7.5" y2="21"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="16.5" y1="3" x2="16.5" y2="21"/><line x1="3" y1="7.5" x2="21" y2="7.5"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="16.5" x2="21" y2="16.5"/></svg>`,
+        hill: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h3v16H4M20 4h-3v16h3"/><circle cx="9" cy="9" r="1.5"/><circle cx="15" cy="9" r="1.5"/><circle cx="9" cy="15" r="1.5"/><circle cx="15" cy="15" r="1.5"/></svg>`,
+        vigenere: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/><path d="m5 6 7 12 7-12"/></svg>`,
+        otp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16.5" r="1.5"/><path d="M12 18v2.5"/></svg>`,
+        railfence: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6l4.5 12 4.5-12 4.5 12L21 6"/><circle cx="3" cy="6" r="1.5"/><circle cx="7.5" cy="18" r="1.5"/><circle cx="12" cy="6" r="1.5"/><circle cx="16.5" cy="18" r="1.5"/><circle cx="21" cy="6" r="1.5"/></svg>`,
+        columnar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><path d="m6 8 0 4M6 12l-1.5-1.5M6 12l1.5-1.5"/><path d="m12 14 0-4M12 10l-1.5 1.5M12 10l1.5 1.5"/><path d="m18 8 0 4M18 12l-1.5-1.5M18 12l1.5-1.5"/></svg>`
+      };
+
       Object.values(CIPHER_REGISTRY).forEach(cipher => {
+        const iconSvg = CIPHER_ICONS[cipher.id] || `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
         const cardHtml = `
           <div class="cipher-card" data-cipher="${cipher.id}">
             <div>
               <div class="cipher-card-header">
-                <span class="cipher-card-title">${cipher.name}</span>
+                <div class="cipher-card-title-group">
+                  <div class="cipher-icon-box" title="${cipher.name} Core Icon">
+                    ${iconSvg}
+                  </div>
+                  <span class="cipher-card-title">${cipher.name}</span>
+                </div>
                 <span class="cipher-card-tag ${cipher.family === 'substitution' ? 'sub' : 'trans'}">${cipher.family}</span>
               </div>
               <p class="cipher-card-desc">${cipher.description}</p>
@@ -1746,7 +2040,7 @@
             <div class="cipher-card-footer">
               <span class="cipher-card-key-badge">${cipher.categoryLabel}</span>
               <span class="cipher-card-open">
-                Open Engine
+                Launch Workspace
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </span>
             </div>
@@ -1894,6 +2188,19 @@
         this.updateCharCounts();
         this.execTimeDisplay.textContent = `Encryption: ${duration} ms`;
         this.renderTrace('Encryption Completed', trace, duration);
+
+        // Visual feedback & output status badge
+        if (this.outputCardPanel) {
+          this.outputCardPanel.classList.remove('output-success-glow');
+          void this.outputCardPanel.offsetWidth;
+          this.outputCardPanel.classList.add('output-success-glow');
+          setTimeout(() => this.outputCardPanel.classList.remove('output-success-glow'), 1800);
+        }
+        if (this.outputStatusBadge) {
+          this.outputStatusBadge.textContent = 'ENCRYPTION COMPLETED';
+          this.outputStatusBadge.className = 'output-status-chip success';
+        }
+        this.updateKPICounters();
         this.showToast(`${cipher.name} encryption successful! (${duration} ms)`, 'success');
       } catch (err) {
         console.error(err);
@@ -1927,6 +2234,19 @@
         this.updateCharCounts();
         this.execTimeDisplay.textContent = `Decryption: ${duration} ms`;
         this.renderTrace('Decryption Completed', trace, duration);
+
+        // Visual feedback & output status badge
+        if (this.outputCardPanel) {
+          this.outputCardPanel.classList.remove('output-success-glow');
+          void this.outputCardPanel.offsetWidth;
+          this.outputCardPanel.classList.add('output-success-glow');
+          setTimeout(() => this.outputCardPanel.classList.remove('output-success-glow'), 1800);
+        }
+        if (this.outputStatusBadge) {
+          this.outputStatusBadge.textContent = 'DECRYPTION COMPLETED';
+          this.outputStatusBadge.className = 'output-status-chip success';
+        }
+        this.updateKPICounters();
         this.showToast(`${cipher.name} decryption successful! (${duration} ms)`, 'success');
       } catch (err) {
         console.error(err);
@@ -2037,6 +2357,11 @@
           this.traceBody.innerHTML = `<p class="trace-empty-hint">Perform an encryption or decryption operation above to inspect mathematical steps.</p>`;
           this.traceStatusChip.textContent = 'Awaiting Execution';
           this.execTimeDisplay.textContent = 'Execution: Ready (0.00 ms)';
+          if (this.outputStatusBadge) {
+            this.outputStatusBadge.textContent = 'IDLE';
+            this.outputStatusBadge.className = 'output-status-chip';
+          }
+          this.updateKPICounters();
           this.showToast('Workspace fields cleared.', 'info');
         }
       );
@@ -2349,8 +2674,9 @@
     }
   }
 
-  // Initialize Application once DOM Content is loaded
+  // Initialize Application & Cosmic Canvas once DOM Content is loaded
   document.addEventListener('DOMContentLoaded', () => {
+    window.cosmicStarfield = new CosmicStarfield('spaceCanvas');
     window.cryptoApp = new CryptoApp();
   });
 
